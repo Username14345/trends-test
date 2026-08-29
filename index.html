@@ -420,7 +420,7 @@ function renderAll(){
 
 /** Cloudflare Worker that re-serves the upstream API with permissive CORS.
  *  Empty string = no proxy configured, dashboard falls back to committed files. */
-const LIVE_PROXY = "";
+const LIVE_PROXY = "https://llm-live.gonka24support.workers.dev/";
 
 /** The local collector exposes /api/data; on GitHub Pages the committed files
  *  are read directly. Both produce the same payload shape. */
