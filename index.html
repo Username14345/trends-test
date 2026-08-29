@@ -2,6 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
 <title>deepseek-v4-flash · запросы по провайдерам</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
@@ -82,6 +84,32 @@
   .sparkmeta{font-size:10px;color:var(--dim2);margin-top:1px;letter-spacing:.01em}
 
   .up{color:var(--up)} .down{color:var(--down)} .muted{color:var(--dim2)}
+
+  @media(max-width:760px){
+    body{padding:14px 11px 40px}
+    h1{font-size:16px} .sub{font-size:11px}
+    header{gap:12px;margin-bottom:14px}
+    .ctrls{width:100%;gap:6px}
+    select{flex:1 1 auto;min-width:0;padding:9px 8px;font-size:12.5px}
+    .lbl{display:none}
+    .kpis{grid-template-columns:repeat(2,1fr);gap:9px}
+    .card{padding:13px 14px;border-radius:15px}
+    .k-val{font-size:19px} .k-sub{font-size:11px}
+    .chart-wrap{height:290px}
+    .plist{max-height:none}
+    /* 12 columns never fit a phone — drop the redundant ones and let the
+       sparkline plus the two headline trends carry the story */
+    th:nth-child(3),td:nth-child(3),      /* доля */
+    th:nth-child(6),td:nth-child(6),      /* 24 ч  */
+    th:nth-child(7),td:nth-child(7),      /* 7 д   */
+    th:nth-child(9),td:nth-child(9),      /* аптайм */
+    th:nth-child(10),td:nth-child(10),    /* ошибки */
+    th:nth-child(11),td:nth-child(11),    /* ток/с  */
+    th:nth-child(12),td:nth-child(12){display:none}
+    table{font-size:12px}
+    .spark{width:104px}
+    .sparkmeta{display:none}
+  }
   footer{margin-top:18px;color:var(--dim2);font-size:11.5px}
   a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
   .warn{color:#ffcf6b}
@@ -442,8 +470,8 @@ async function loadData(){
   if(!BASE_HISTORY || Date.now() - baseLoadedAt > 60000){
     const bust = '?t=' + Math.floor(Date.now()/60000);
     const [hRes, lRes] = await Promise.all([
-      fetch('history.jsonl' + bust),
-      LOGOS ? Promise.resolve(null) : fetch('logos.json' + bust)
+      fetch('history.jsonl' + bust, {cache:'no-store'}),
+      LOGOS ? Promise.resolve(null) : fetch('logos.json' + bust, {cache:'no-store'})
     ]);
     if(!hRes.ok) throw new Error('history.jsonl ' + hRes.status);
     BASE_HISTORY = (await hRes.text()).split('\n').filter(Boolean)
@@ -491,7 +519,8 @@ async function tick(){
     if(!DATA.latest){ $('#live').textContent = 'жду данные API…'; return; }
     $('#wh').textContent = DATA.latest.windowHours ?? 24;
     renderAll();
-    $('#live').textContent = `обновлено ${hhmm(DATA.latest.ts)}`;
+    lastOk = Date.now();
+    showAge();
     const span = DATA.history.length > 1
       ? ` · история с ${stamp(DATA.history[0].ts)}` : '';
     $('#foot').innerHTML =
@@ -505,14 +534,37 @@ async function tick(){
   }catch(e){ $('#live').textContent = 'данные недоступны'; }
 }
 
+/** Seconds since the last successful fetch, so a stalled tab is obvious
+ *  instead of silently showing old numbers. */
+let lastOk = 0;
+function showAge(){
+  if(!lastOk) return;
+  const age = Math.round((Date.now() - lastOk)/1000);
+  const t = DATA && DATA.latest ? hhmm(DATA.latest.ts) : '';
+  $('#live').textContent = age < 30 ? `обновлено ${t}`
+    : age < 90 ? `обновлено ${t} · ${age} с назад`
+    : `нет связи ${Math.round(age/60)} мин · данные устарели`;
+}
+setInterval(showAge, 5000);
+
 ['range','view','trend'].forEach(id => $('#'+id).addEventListener('change', () => DATA && renderAll()));
 
 // local collector polls every minute, GitHub Actions only every ~5 — no point
 // hammering the CDN, so the refresh rate follows whichever backend answered
-(async function loop(){
+let timer = null;
+async function loop(){
+  clearTimeout(timer);
   await tick();
-  setTimeout(loop, LIVE ? 10000 : STATIC_MODE ? 60000 : 15000);
-})();
+  timer = setTimeout(loop, LIVE ? 10000 : STATIC_MODE ? 60000 : 15000);
+}
+loop();
+
+// Mobile browsers freeze timers in background tabs, so a phone that has been
+// locked wakes up showing stale numbers until it polls again. Refresh
+// immediately when the tab becomes visible or the network comes back.
+document.addEventListener('visibilitychange', () => { if(!document.hidden) loop(); });
+window.addEventListener('focus', loop);
+window.addEventListener('online', loop);
 </script>
 </body>
 </html>
