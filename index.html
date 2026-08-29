@@ -418,9 +418,16 @@ function renderAll(){
   renderKpis(); renderChart(); renderMovers(); renderTable();
 }
 
+/** Cloudflare Worker that re-serves the upstream API with permissive CORS.
+ *  Empty string = no proxy configured, dashboard falls back to committed files. */
+const LIVE_PROXY = "";
+
 /** The local collector exposes /api/data; on GitHub Pages the committed files
  *  are read directly. Both produce the same payload shape. */
-let STATIC_MODE = false;
+let STATIC_MODE = false, LIVE = false;
+let BASE_HISTORY = null, LOGOS = null;   // committed data, fetched once per minute
+let baseLoadedAt = 0;
+
 async function loadData(){
   if(!STATIC_MODE){
     try{
@@ -429,18 +436,50 @@ async function loadData(){
     }catch(e){ /* no local collector, fall through */ }
     STATIC_MODE = true;
   }
-  const bust = '?t=' + Math.floor(Date.now()/60000);
-  const [hRes, lRes] = await Promise.all([
-    fetch('history.jsonl' + bust), fetch('logos.json' + bust)
-  ]);
-  if(!hRes.ok) throw new Error('history.jsonl ' + hRes.status);
-  const history = (await hRes.text()).split('\n').filter(Boolean)
-    .map(l => { try{ return JSON.parse(l); }catch(e){ return null; } })
-    .filter(s => s && s.providers);
+
+  // The committed history only grows every few minutes, so re-reading it on
+  // every live tick would just waste requests.
+  if(!BASE_HISTORY || Date.now() - baseLoadedAt > 60000){
+    const bust = '?t=' + Math.floor(Date.now()/60000);
+    const [hRes, lRes] = await Promise.all([
+      fetch('history.jsonl' + bust),
+      LOGOS ? Promise.resolve(null) : fetch('logos.json' + bust)
+    ]);
+    if(!hRes.ok) throw new Error('history.jsonl ' + hRes.status);
+    BASE_HISTORY = (await hRes.text()).split('\n').filter(Boolean)
+      .map(l => { try{ return JSON.parse(l); }catch(e){ return null; } })
+      .filter(s => s && s.providers);
+    if(lRes && lRes.ok) LOGOS = await lRes.json();
+    baseLoadedAt = Date.now();
+  }
+
+  let history = BASE_HISTORY;
+
+  // Live tail: ask the proxy for the current numbers and extend the committed
+  // history in memory. Nothing is written anywhere — the next Actions run
+  // persists its own snapshot.
+  if(LIVE_PROXY){
+    try{
+      const r = await fetch(LIVE_PROXY, {cache:'no-store'});
+      if(r.ok){
+        const snap = await r.json();
+        if(snap.providers && snap.providers.length){
+          const last = history[history.length-1];
+          const moved = !last || last.providers.some(p => {
+            const n = snap.providers.find(x => x.id === p.id);
+            return n && n.requests !== p.requests;
+          });
+          history = moved ? [...history, snap] : [...history.slice(0,-1), snap];
+          LIVE = true;
+        }
+      } else LIVE = false;
+    }catch(e){ LIVE = false; }
+  }
+
   return {
     model: 'deepseek-v4-flash',
     status: {polls: history.length, lastError: null},
-    logos: lRes.ok ? await lRes.json() : {},
+    logos: LOGOS || {},
     history,
     latest: history[history.length-1] || null,
   };
@@ -458,8 +497,10 @@ async function tick(){
     $('#foot').innerHTML =
       `источник: <a href="https://llmgateway.io/models/${DATA.model}" target="_blank">llmgateway.io/models/${DATA.model}</a>`
       + ` · точек: ${DATA.history.length}${span}`
-      + (STATIC_MODE ? ' · сбор идёт в GitHub Actions примерно раз в 5 минут'
-                     : ` · опросов: ${DATA.status.polls} · локальный сборщик, раз в минуту`)
+      + (!STATIC_MODE ? ` · опросов: ${DATA.status.polls} · локальный сборщик, раз в минуту`
+         : LIVE ? ' · лайв через Cloudflare Worker, раз в 10 секунд · история из GitHub Actions'
+         : LIVE_PROXY ? ' · <span class="warn">прокси не отвечает</span> · история из GitHub Actions'
+                      : ' · сбор идёт в GitHub Actions примерно раз в 5 минут')
       + (DATA.status.lastError ? ` · <span class="warn">ошибка опроса: ${DATA.status.lastError}</span>` : '');
   }catch(e){ $('#live').textContent = 'данные недоступны'; }
 }
@@ -470,7 +511,7 @@ async function tick(){
 // hammering the CDN, so the refresh rate follows whichever backend answered
 (async function loop(){
   await tick();
-  setTimeout(loop, STATIC_MODE ? 60000 : 15000);
+  setTimeout(loop, LIVE ? 10000 : STATIC_MODE ? 60000 : 15000);
 })();
 </script>
 </body>
