@@ -1,0 +1,37 @@
+name: collect
+
+on:
+  schedule:
+    # GitHub's smallest scheduling unit is 5 minutes and runs can be delayed
+    # under load, so treat this as "roughly every 5 minutes".
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Take snapshot
+        run: python3 collect.py
+
+      - name: Commit if data moved
+        run: |
+          git config user.name "llmgateway-trends bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add history.jsonl logos.json
+          if git diff --staged --quiet; then
+            echo "nothing changed"
+            exit 0
+          fi
+          git commit -m "snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git pull --rebase --autostash
+          git push

@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>deepseek-v4-flash · запросы по провайдерам</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#06070c; --card:rgba(255,255,255,.035); --line:rgba(255,255,255,.08);
+    --txt:#eef1f8; --dim:#7f899c; --dim2:#59627a;
+    --up:#28e0a4; --down:#ff5d78; --accent:#7c9dff;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-font-smoothing:antialiased}
+  body{
+    margin:0; color:var(--txt);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;
+    background:
+      radial-gradient(1100px 620px at 8% -12%, rgba(60,84,200,.30), transparent 62%),
+      radial-gradient(900px 560px at 96% -6%, rgba(16,124,106,.26), transparent 58%),
+      radial-gradient(700px 500px at 50% 112%, rgba(120,70,190,.15), transparent 60%),
+      var(--bg);
+    min-height:100vh; padding:24px clamp(14px,3.2vw,40px) 64px;
+  }
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+  header{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;justify-content:space-between;margin-bottom:20px}
+  .brand{display:flex;align-items:center;gap:13px}
+  .glyph{width:40px;height:40px;border-radius:12px;flex:0 0 40px;
+    background:linear-gradient(140deg,#7c9dff,#28e0a4);display:grid;place-items:center;
+    font-weight:700;font-size:15px;color:#04060c;box-shadow:0 6px 22px rgba(70,120,255,.34)}
+  h1{font-size:20px;margin:0;font-weight:660;letter-spacing:-.1px}
+  .sub{color:var(--dim);font-size:12px;margin-top:3px}
+  .ctrls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .lbl{font-size:11px;color:var(--dim2);text-transform:uppercase;letter-spacing:.08em;margin-right:-3px}
+  select{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--txt);
+    border-radius:10px;padding:8px 11px;font-size:13px;outline:none;cursor:pointer}
+  select:hover{background:rgba(255,255,255,.08)} select:focus{border-color:var(--accent)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--up);display:inline-block;margin-right:7px;
+    box-shadow:0 0 0 0 rgba(40,224,164,.55);animation:pulse 2.2s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(40,224,164,0)}100%{box-shadow:0 0 0 0 rgba(40,224,164,0)}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:17px 19px;
+    backdrop-filter:blur(10px);box-shadow:0 1px 0 rgba(255,255,255,.045) inset}
+  .card h2{font-size:11.5px;margin:0;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+  .card .hint{font-size:11.5px;color:var(--dim2);margin-top:4px}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+  .grid{display:grid;gap:14px}
+  .kpis{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-bottom:14px}
+  .k-label{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.1em}
+  .k-val{font-size:26px;font-weight:660;margin-top:7px;letter-spacing:-.5px;display:flex;align-items:center;gap:9px}
+  .k-sub{font-size:12px;color:var(--dim);margin-top:5px}
+  .two{grid-template-columns:1.62fr 1fr}
+  @media(max-width:1080px){.two{grid-template-columns:1fr}}
+
+  .chart-wrap{position:relative;height:380px}
+
+  .logo{width:22px;height:22px;flex:0 0 22px;border-radius:6px;display:grid;place-items:center;
+    background:rgba(255,255,255,.07);color:#eef1f8;overflow:hidden;padding:3px}
+  .logo svg{display:block;max-width:100%;max-height:100%}
+  .logo.big{width:32px;height:32px;flex:0 0 32px;border-radius:9px;padding:5px}
+
+  .plist{display:flex;flex-direction:column;gap:1px;max-height:348px;overflow:auto;padding-right:4px}
+  .plist::-webkit-scrollbar{width:6px}
+  .plist::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+  .prow{display:flex;align-items:center;gap:9px;padding:6px 0;font-size:12.5px}
+  .prow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .track{flex:0 0 74px;height:6px;border-radius:4px;background:rgba(255,255,255,.06);position:relative;overflow:hidden}
+  .track i{position:absolute;top:0;height:100%;border-radius:4px}
+  .val{min-width:58px;text-align:right;font-weight:600}
+  .delta{min-width:66px;text-align:right;font-size:11.5px}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:right;color:var(--dim);font-weight:500;font-size:10.5px;text-transform:uppercase;
+    letter-spacing:.08em;padding:0 0 10px;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  td{padding:8px 0;border-top:1px solid rgba(255,255,255,.05);text-align:right;white-space:nowrap}
+  tbody tr:hover td{background:rgba(255,255,255,.03)}
+  .pname{display:flex;align-items:center;gap:9px}
+  .spark{display:block}
+  td.sparkcell{text-align:left;padding:6px 14px 6px 0}
+  .sparkmeta{font-size:10px;color:var(--dim2);margin-top:1px;letter-spacing:.01em}
+
+  .up{color:var(--up)} .down{color:var(--down)} .muted{color:var(--dim2)}
+  footer{margin-top:18px;color:var(--dim2);font-size:11.5px}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .warn{color:#ffcf6b}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="glyph">DS</div>
+    <div>
+      <h1>deepseek-v4-flash · запросы по провайдерам</h1>
+      <div class="sub">данные блока Provider Performance с llmgateway.io · скользящее окно <span id="wh">24</span> ч ·
+        история копится локально и переживает перезагрузку</div>
+    </div>
+  </div>
+  <div class="ctrls">
+    <span class="lbl">график</span>
+    <select id="range">
+      <option value="1">за 1 час</option>
+      <option value="6">за 6 часов</option>
+      <option value="24" selected>за 24 часа</option>
+      <option value="168">за 7 дней</option>
+      <option value="720">за 30 дней</option>
+      <option value="0">вся история</option>
+    </select>
+    <select id="view">
+      <option value="delta" selected>Δ от начала</option>
+      <option value="index">рост, % от начала</option>
+      <option value="share">доля, %</option>
+      <option value="abs">запросы</option>
+      <option value="log">запросы · лог. шкала</option>
+    </select>
+    <span class="lbl">тренд</span>
+    <select id="trend">
+      <option value="1" selected>за 1 час</option>
+      <option value="6">за 6 часов</option>
+      <option value="24">за 24 часа</option>
+      <option value="168">за 7 дней</option>
+      <option value="0">вся история</option>
+    </select>
+    <span class="sub"><span class="dot"></span><span id="live">подключение…</span></span>
+  </div>
+</header>
+
+<div class="grid kpis" id="kpis"></div>
+
+<div class="grid two" style="margin-bottom:14px">
+  <div class="card">
+    <div class="head"><div>
+      <h2 id="chartTitle">Запросы по провайдерам во времени</h2>
+      <div class="hint">каждая линия — провайдер, обслуживающий deepseek-v4-flash</div>
+    </div></div>
+    <div class="chart-wrap"><canvas id="dyn"></canvas></div>
+    <div class="hint" id="note" style="margin-top:9px"></div>
+  </div>
+
+  <div class="card">
+    <div class="head"><div>
+      <h2>Кто растёт, кто падает</h2>
+      <div class="hint" id="moversHint"></div>
+    </div></div>
+    <div class="plist" id="plist"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="head"><div>
+    <h2>Провайдеры · тренды на разных промежутках</h2>
+    <div class="hint">прочерк — история ещё не покрывает промежуток · «динамика» строится за период, выбранный в селекторе «график»</div>
+  </div></div>
+  <div style="overflow:auto">
+    <table>
+      <thead><tr>
+        <th>провайдер</th><th>запросы</th><th>доля</th>
+        <th>1 ч</th><th>6 ч</th><th>24 ч</th><th>7 д</th>
+        <th>динамика</th><th>аптайм</th><th>ошибки</th><th>ток/с</th><th>TTFT</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<footer id="foot"></footer>
+
+<script>
+const $ = s => document.querySelector(s);
+const fmt = n => n==null ? '—'
+  : Math.abs(n) >= 1e9 ? (n/1e9).toFixed(2)+'B' : Math.abs(n) >= 1e6 ? (n/1e6).toFixed(2)+'M'
+  : Math.abs(n) >= 1e4 ? (n/1e3).toFixed(1)+'K' : Math.round(n).toLocaleString('ru-RU');
+const pct = v => v==null ? '—' : (v>=0?'+':'') + (Math.abs(v)>=100 ? v.toFixed(0) : v.toFixed(1)) + '%';
+const hhmm = iso => new Date(iso).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+const stamp = iso => new Date(iso).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+const sum = ps => ps.reduce((a,p)=>a+p.requests,0);
+
+const COLORS = ['#7c9dff','#28e0a4','#ffb457','#ff5d78','#c98bff','#4fd6ff','#f2e05a','#8fe36b',
+                '#ff9ac1','#5ad1c0','#ffd08a','#a0a8ff','#6fe0ff'];
+const colorOf = (() => { const m = new Map();
+  return id => { if(!m.has(id)) m.set(id, COLORS[m.size % COLORS.length]); return m.get(id); }; })();
+
+let DATA = null, dynChart;
+Chart.defaults.color = '#7f899c';
+Chart.defaults.font.family = '-apple-system,Inter,system-ui,sans-serif';
+Chart.defaults.borderColor = 'rgba(255,255,255,.06)';
+
+const logoHtml = (id, big) =>
+  `<span class="logo${big?' big':''}" title="${id}">${(DATA.logos||{})[id] || ''}</span>`;
+
+/** last snapshot at or before (now - hours); null when history is too short */
+function snapshotAgo(hours){
+  const h = DATA.history;
+  if(!hours) return h[0];
+  const cutoff = Date.now() - hours*3600e3;
+  let found = null;
+  for(const s of h){ if(new Date(s.ts).getTime() <= cutoff) found = s; else break; }
+  return found;
+}
+
+/** span of the accumulated history, human readable */
+function coverText(){
+  const h = DATA.history;
+  if(h.length < 2) return '0 мин';
+  const m = (new Date(h[h.length-1].ts) - new Date(h[0].ts))/60000;
+  return m < 90 ? `${Math.round(m)} мин` : m < 2880 ? `${(m/60).toFixed(1)} ч` : `${(m/1440).toFixed(1)} дн`;
+}
+
+/** true when history actually reaches back `hours` */
+const covers = hours => !hours || !!snapshotAgo(hours);
+
+/** label for the trend selector, downgraded when history is still too short */
+function trendLabel(){
+  const hours = +$('#trend').value;
+  return covers(hours) ? $('#trend').selectedOptions[0].textContent.replace('за ','')
+                       : `вся история · ${coverText()}`;
+}
+
+/** requests change for one provider over `hours`; {abs, pct} or null.
+ *  loose=true falls back to the oldest snapshot when history is shorter than `hours`. */
+function trendOf(id, hours, loose){
+  let past = snapshotAgo(hours);
+  if(!past && loose) past = DATA.history[0];
+  if(!past) return null;
+  const before = past.providers.find(p=>p.id===id);
+  const now = DATA.latest.providers.find(p=>p.id===id);
+  if(!before || !now) return null;
+  const abs = now.requests - before.requests;
+  return {abs, pct: before.requests ? abs/before.requests*100 : (abs?null:0)};
+}
+
+function trendCell(id, hours){
+  const t = trendOf(id, hours);
+  if(!t) return '<span class="muted">—</span>';
+  if(t.abs === 0) return '<span class="muted">0</span>';
+  const cls = t.abs > 0 ? 'up' : 'down';
+  const p = t.pct==null ? '' : ` <span style="opacity:.65">${pct(t.pct)}</span>`;
+  return `<span class="${cls}">${t.abs>0?'+':'−'}${fmt(Math.abs(t.abs))}${p}</span>`;
+}
+
+function sparkline(id, hist){
+  const pts = hist.map(s => { const p = s.providers.find(x=>x.id===id);
+                              return p ? {t:s.ts, v:p.requests} : null; }).filter(Boolean);
+  if(pts.length < 2) return '<span class="muted">—</span>';
+  const vs = pts.map(p=>p.v);
+  const w=170, h=42, pad=4;
+  const min=Math.min(...vs), max=Math.max(...vs), span=(max-min)||1;
+  const X = i => (i/(pts.length-1))*(w-2*pad)+pad;
+  const Y = v => h-pad-((v-min)/span)*(h-2*pad);
+  const line = pts.map((p,i)=>`${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  const area = `${pad},${h-pad} ${line} ${w-pad},${h-pad}`;
+  const iMin=vs.indexOf(min), iMax=vs.indexOf(max), last=pts.length-1;
+  const diff = vs[last]-vs[0];
+  const c = diff >= 0 ? '#28e0a4' : '#ff5d78';
+  const gid = `sp-${id}`;
+  // ровная линия по нулевому размаху означает «значение не двигалось»
+  const flat = max === min;
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${c}" stop-opacity=".30"/>
+        <stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs>
+      <polygon points="${area}" fill="url(#${gid})"/>
+      <polyline points="${line}" fill="none" stroke="${c}" stroke-width="1.7"
+        stroke-linejoin="round" stroke-linecap="round"/>
+      ${flat ? '' : `<circle cx="${X(iMax).toFixed(1)}" cy="${Y(max).toFixed(1)}" r="2" fill="#eef1f8" opacity=".5"/>
+      <circle cx="${X(iMin).toFixed(1)}" cy="${Y(min).toFixed(1)}" r="2" fill="#eef1f8" opacity=".3"/>`}
+      <circle cx="${X(last).toFixed(1)}" cy="${Y(vs[last]).toFixed(1)}" r="2.9" fill="${c}"/>
+      <title>${pts.length} точек · ${hhmm(pts[0].t)}–${hhmm(pts[last].t)}
+мин ${min.toLocaleString('ru-RU')} · макс ${max.toLocaleString('ru-RU')}</title></svg>
+    <div class="sparkmeta num">${flat ? 'без изменений'
+      : `${min.toLocaleString('ru-RU')} – ${max.toLocaleString('ru-RU')} · размах ${fmt(max-min)}`}</div>`;
+}
+
+function renderKpis(){
+  const latest = DATA.latest, ps = latest.providers, total = sum(ps);
+  const hours = +$('#trend').value;
+  const lead = [...ps].sort((a,b)=>b.requests-a.requests)[0];
+  const ts = ps.map(p => ({p, t: trendOf(p.id, hours, true)})).filter(x=>x.t && x.t.abs!==0);
+  const gain = ts.filter(x=>x.t.abs>0).sort((a,b)=>b.t.abs-a.t.abs)[0];
+  const loss = ts.filter(x=>x.t.abs<0).sort((a,b)=>a.t.abs-b.t.abs)[0];
+  const label = trendLabel();
+  const cards = [
+    ['запросов за 24 ч', `<span class="num">${total.toLocaleString('ru-RU')}</span>`, `${ps.length} провайдеров`],
+    ['лидер по запросам',
+      lead ? `${logoHtml(lead.id,true)}<span class="num">${fmt(lead.requests)}</span>` : '—',
+      lead ? `${lead.name} · ${(lead.requests/total*100).toFixed(1)}% трафика` : ''],
+    [`сильнее всех вырос · ${label}`,
+      gain ? `${logoHtml(gain.p.id,true)}<span class="up num">+${fmt(gain.t.abs)}</span>` : '<span class="muted">—</span>',
+      gain ? `${gain.p.name} ${gain.t.pct!=null?'· '+pct(gain.t.pct):''}` : 'пока никто не вырос'],
+    [`сильнее всех упал · ${label}`,
+      loss ? `${logoHtml(loss.p.id,true)}<span class="down num">−${fmt(-loss.t.abs)}</span>` : '<span class="muted">—</span>',
+      loss ? `${loss.p.name} ${loss.t.pct!=null?'· '+pct(loss.t.pct):''}` : 'пока никто не упал'],
+  ];
+  $('#kpis').innerHTML = cards.map(([l,v,s]) =>
+    `<div class="card"><div class="k-label">${l}</div><div class="k-val">${v}</div><div class="k-sub">${s}</div></div>`).join('');
+}
+
+function visibleHistory(){
+  const hours = +$('#range').value;
+  if(!hours) return DATA.history;
+  const cutoff = Date.now() - hours*3600e3;
+  const slice = DATA.history.filter(s => new Date(s.ts).getTime() >= cutoff);
+  return slice.length >= 2 ? slice : DATA.history.slice(-2);
+}
+
+function renderChart(){
+  const history = visibleHistory(), view = $('#view').value, one = history.length < 2;
+  const ids = [...new Set(history.flatMap(s => s.providers.map(p=>p.id)))];
+  const firstOf = new Map(ids.map(id => {
+    const s = history.find(s => s.providers.some(p=>p.id===id));
+    return [id, s ? s.providers.find(p=>p.id===id).requests : null];
+  }));
+  const nameOf = new Map(DATA.latest.providers.map(p=>[p.id,p.name]));
+  const value = (s,p,first) =>
+      view==='share' ? (sum(s.providers) ? p.requests/sum(s.providers)*100 : null)
+    : view==='delta' ? (first==null ? 0 : p.requests - first)
+    : view==='index' ? (first ? p.requests/first*100 : null)
+    : p.requests;
+
+  const datasets = ids.map(id => ({
+    label: nameOf.get(id) || id,
+    borderColor: colorOf(id), backgroundColor: colorOf(id)+'26',
+    data: history.map(s => { const p = s.providers.find(x=>x.id===id);
+                             return p ? value(s,p,firstOf.get(id)) : null; }),
+    borderWidth:2, tension:.28, pointHoverRadius:5, spanGaps:true, fill:false,
+    pointRadius: one ? 3.5 : history.length <= 80 ? 2.2 : 0,
+  }));
+
+  const tickFmt = v =>
+      view==='share' ? v.toFixed(1)+'%'
+    : view==='index' ? v.toFixed(1)+'%'
+    : view==='delta' ? (v>0?'+':'')+fmt(v)
+    : fmt(v);
+  const opts = {
+    responsive:true, maintainAspectRatio:false, animation:{duration:420},
+    interaction:{mode:'index',intersect:false},
+    plugins:{
+      legend:{position:'bottom',labels:{boxWidth:8,boxHeight:8,usePointStyle:true,pointStyle:'circle',padding:11,font:{size:11}}},
+      tooltip:{backgroundColor:'rgba(10,12,20,.94)',borderColor:'rgba(255,255,255,.1)',borderWidth:1,padding:10,
+        itemSort:(a,b)=>b.parsed.y-a.parsed.y,
+        callbacks:{label:c=>` ${c.dataset.label}: ${tickFmt(c.parsed.y)}`}}
+    },
+    scales:{
+      x:{grid:{display:false},ticks:{maxRotation:0,autoSkipPadding:18}},
+      y:{ type: view==='log' ? 'logarithmic' : 'linear', ticks:{callback:tickFmt},
+          beginAtZero:false, grace:'6%',
+          grid:{color:'rgba(255,255,255,.045)'} }
+    }
+  };
+  const labels = history.map(s=>hhmm(s.ts));
+  if(!dynChart) dynChart = new Chart($('#dyn'), {type:'line', data:{labels,datasets}, options:opts});
+  else { dynChart.data = {labels,datasets}; dynChart.options = opts; dynChart.update(); }
+
+  const titles = {abs:'Запросы по провайдерам', log:'Запросы · логарифмическая шкала',
+                  share:'Доля запросов между провайдерами', delta:'Прирост запросов от начала периода',
+                  index:'Рост каждого провайдера, начало периода = 100%'};
+  $('#chartTitle').textContent = `${titles[view]} · ${$('#range').selectedOptions[0].textContent}`;
+
+  if(one){
+    $('#note').textContent = '⏳ одна точка: линии появятся со следующего опроса.';
+    return;
+  }
+  const mins = (new Date(history[history.length-1].ts) - new Date(history[0].ts))/60000;
+  const covered = mins < 90 ? `${Math.round(mins)} мин`
+                : mins < 2880 ? `${(mins/60).toFixed(1)} ч` : `${(mins/1440).toFixed(1)} дн`;
+  const want = +$('#range').value;
+  let note = `${history.length} точек · охват ${covered} · ${stamp(history[0].ts)} → ${stamp(history[history.length-1].ts)}`;
+  if(want && mins < want*60*0.9)
+    note += ` · история пока короче выбранного окна, показано всё что есть — копится каждую минуту`;
+  if(view==='abs' || view==='log')
+    note += ` · крупные провайдеры сжимают мелких: для сравнения динамики смотри «Δ от начала» или «рост, %»`;
+  $('#note').textContent = note;
+}
+
+function renderMovers(){
+  const hours = +$('#trend').value;
+  const rows = DATA.latest.providers.map(p => ({p, t: trendOf(p.id, hours, true)}))
+    .sort((a,b) => (b.t?.abs ?? -Infinity) - (a.t?.abs ?? -Infinity));
+  const max = Math.max(1, ...rows.map(r => Math.abs(r.t?.abs ?? 0)));
+  $('#moversHint').textContent = `изменение числа запросов за ${trendLabel()}`;
+  $('#plist').innerHTML = rows.map(({p,t}) => {
+    const a = t?.abs ?? null, w = a ? Math.abs(a)/max*50 : 0, up = (a??0) >= 0;
+    const bar = a == null ? '' :
+      `<i style="${up?`left:50%;width:${w}%;background:var(--up)`:`right:50%;width:${w}%;background:var(--down)`}"></i>`;
+    const txt = a == null ? '<span class="muted">—</span>' : a === 0 ? '<span class="muted">0</span>'
+      : `<span class="${up?'up':'down'}">${up?'+':'−'}${fmt(Math.abs(a))}</span>`;
+    return `<div class="prow">
+      ${logoHtml(p.id)}
+      <span class="nm" title="${p.id}">${p.name}</span>
+      <span class="track">${bar}</span>
+      <span class="val num">${p.requests.toLocaleString('ru-RU')}</span>
+      <span class="delta num">${txt}</span></div>`;
+  }).join('');
+}
+
+function renderTable(){
+  const ps = DATA.latest.providers, total = sum(ps);
+  const hist = visibleHistory();
+  const rows = [...ps].sort((a,b)=>b.requests-a.requests);
+  $('#tbody').innerHTML = rows.map(p => `<tr>
+      <td><span class="pname">${logoHtml(p.id)}${p.name}</span></td>
+      <td class="num">${p.requests.toLocaleString('ru-RU')}</td>
+      <td class="num">${total?(p.requests/total*100).toFixed(2):'0.00'}%</td>
+      <td class="num">${trendCell(p.id,1)}</td>
+      <td class="num">${trendCell(p.id,6)}</td>
+      <td class="num">${trendCell(p.id,24)}</td>
+      <td class="num">${trendCell(p.id,168)}</td>
+      <td class="sparkcell">${sparkline(p.id, hist)}</td>
+      <td class="num ${p.uptime>=99?'up':p.uptime>=95?'':'down'}">${p.uptime!=null?p.uptime.toFixed(1)+'%':'—'}</td>
+      <td class="num ${p.errorRate>2?'down':''}">${p.errorRate!=null?p.errorRate.toFixed(1)+'%':'—'}</td>
+      <td class="num">${p.tps ?? '—'}</td>
+      <td class="num">${p.ttft!=null?Math.round(p.ttft)+' мс':'—'}</td></tr>`).join('');
+}
+
+function renderAll(){
+  renderKpis(); renderChart(); renderMovers(); renderTable();
+}
+
+/** The local collector exposes /api/data; on GitHub Pages the committed files
+ *  are read directly. Both produce the same payload shape. */
+let STATIC_MODE = false;
+async function loadData(){
+  if(!STATIC_MODE){
+    try{
+      const r = await fetch('/api/data', {cache:'no-store'});
+      if(r.ok) return await r.json();
+    }catch(e){ /* no local collector, fall through */ }
+    STATIC_MODE = true;
+  }
+  const bust = '?t=' + Math.floor(Date.now()/60000);
+  const [hRes, lRes] = await Promise.all([
+    fetch('history.jsonl' + bust), fetch('logos.json' + bust)
+  ]);
+  if(!hRes.ok) throw new Error('history.jsonl ' + hRes.status);
+  const history = (await hRes.text()).split('\n').filter(Boolean)
+    .map(l => { try{ return JSON.parse(l); }catch(e){ return null; } })
+    .filter(s => s && s.providers);
+  return {
+    model: 'deepseek-v4-flash',
+    status: {polls: history.length, lastError: null},
+    logos: lRes.ok ? await lRes.json() : {},
+    history,
+    latest: history[history.length-1] || null,
+  };
+}
+
+async function tick(){
+  try{
+    DATA = await loadData();
+    if(!DATA.latest){ $('#live').textContent = 'жду данные API…'; return; }
+    $('#wh').textContent = DATA.latest.windowHours ?? 24;
+    renderAll();
+    $('#live').textContent = `обновлено ${hhmm(DATA.latest.ts)}`;
+    const span = DATA.history.length > 1
+      ? ` · история с ${stamp(DATA.history[0].ts)}` : '';
+    $('#foot').innerHTML =
+      `источник: <a href="https://llmgateway.io/models/${DATA.model}" target="_blank">llmgateway.io/models/${DATA.model}</a>`
+      + ` · точек: ${DATA.history.length}${span}`
+      + (STATIC_MODE ? ' · сбор идёт в GitHub Actions примерно раз в 5 минут'
+                     : ` · опросов: ${DATA.status.polls} · локальный сборщик, раз в минуту`)
+      + (DATA.status.lastError ? ` · <span class="warn">ошибка опроса: ${DATA.status.lastError}</span>` : '');
+  }catch(e){ $('#live').textContent = 'данные недоступны'; }
+}
+
+['range','view','trend'].forEach(id => $('#'+id).addEventListener('change', () => DATA && renderAll()));
+
+// local collector polls every minute, GitHub Actions only every ~5 — no point
+// hammering the CDN, so the refresh rate follows whichever backend answered
+(async function loop(){
+  await tick();
+  setTimeout(loop, STATIC_MODE ? 60000 : 15000);
+})();
+</script>
+</body>
+</html>
